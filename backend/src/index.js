@@ -2,28 +2,33 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const mongoose = require('mongoose');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+
+const ambulanceRoutes = require('./routes/ambulance.routes');
+const emergencyRoutes = require('./routes/emergency.routes');
+const { initFirebase } = require('./services/notification.service');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: '*' }
-});
+const io = new Server(server, { cors: { origin: '*' } });
 
 app.use(express.json());
 app.use(require('cors')());
 
-// Health check
+// Routes
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'ert-backend' });
 });
+app.use('/api/ambulance', ambulanceRoutes);
+app.use('/api/emergency', emergencyRoutes);
 
-// WebSocket - ambulance GPS
+// WebSocket - live GPS tracking
 io.on('connection', (socket) => {
   console.log('Client connected:', socket.id);
 
   socket.on('ambulance:location', (data) => {
-    console.log('GPS received:', data);
+    console.log('GPS update:', data);
     io.emit('ambulance:update', data);
   });
 
@@ -32,9 +37,12 @@ io.on('connection', (socket) => {
   });
 });
 
-// MongoDB connection
+// MongoDB
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('MongoDB connected'))
+  .then(() => {
+    console.log('MongoDB connected');
+    initFirebase();
+  })
   .catch(err => console.error('MongoDB error:', err));
 
 const PORT = process.env.PORT || 3000;
